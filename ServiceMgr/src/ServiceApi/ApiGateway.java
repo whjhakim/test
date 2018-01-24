@@ -20,6 +20,7 @@ import ZabbixDriver.ZabbixDriver;
 import java.util.Map;
 import java.util.Collections;
 import java.util.HashMap;
+import Mongo.MongoApi;
 /**
  * Servlet implementation class ApiGateway
  */
@@ -29,6 +30,7 @@ public class ApiGateway extends HttpServlet {
 	private ServiceMgr serviceMgr ;
 	private ZabbixDriver zabbixDriver;
 	private Alarm alarm;
+	private MongoApi mongo ;
 	
 	//monitorTarget,
 	private Map<String,MonitorFormat> requestMonitorInfo = Collections.synchronizedMap(
@@ -65,10 +67,14 @@ public class ApiGateway extends HttpServlet {
 		params.put("interval", 10000);
 		serviceMgr.handler(params, this.zabbixDriver, this.requestMonitorInfo,this.serviceMgr,
 				this.quickCache,this.requestAlertInfo);//it will run all the time
+		
+		//initate the mongo driver
+		this.mongo = new MongoApi();
 
+		//initiate the alarm
 		String dbUrl = "";
-		alarm = new Alarm(dbUrl);
-		alarm.start();
+		this.alarm = new Alarm(dbUrl,this.mongo);
+		this.alarm.start();
     }
 
 	/**

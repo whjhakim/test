@@ -7,18 +7,24 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
 import java.util.HashMap;
+import Mongo.MongoApi;
 
 public class Alarm implements Runnable{
 	//alarmInfoMap: <vnf_nid, alarmInfoList> . Each  list contains all the alarmId of this vnf
 	private Map<String,List<AlarmFormat>> alarmInfoMap = Collections.synchronizedMap(new HashMap<String, 
 			List<AlarmFormat>>());
+	private Map<String,JSONObject> targetMaterials = new HashMap<String,JSONObject>();
 
 	private String mongDbUrl = "";
 	private String rawTemp = "";
+	private MongoApi mongoApi;
 
-	public Alarm(String mongDBUrl) {
+	public Alarm(String mongDBUrl, MongoApi mongo) {
 		this.mongDbUrl = mongDBUrl;
+		this.mongoApi = mongo;
 	}
 
 	public void start() {
@@ -43,6 +49,10 @@ public class Alarm implements Runnable{
 	 * request all monitorTarges of all vnfs
 	 */
 	private void sendToMongDB() {
+		for(String vnf_nid : this.alarmInfoMap.keySet()) {
+			JSONObject vnfMonitorTarget = this.mongoApi.getVnfMonitorTarget(vnf_nid);
+			this.targetMaterials.put(vnf_nid, vnfMonitorTarget);
+		}
 	}
 	
 	/*
@@ -50,8 +60,42 @@ public class Alarm implements Runnable{
 	 */
 	private void copy() {
 		for(String vnf : this.alarmInfoMap.keySet()) {
+			//string is the alarm id
+			Map<String,FutureTask<Integer>> futureMap = new HashMap<String, FutureTask<Integer>>();
+			JSONObject monitorTargets = this.targetMaterials.get(vnf);
 			for(AlarmFormat alarm : this.alarmInfoMap.get(vnf)) {
-				alarm.copy();
+				Callable<Integer> callable = new Callable<Integer>() {
+					public Integer call() throws Exception{
+						try {
+							alarm.copy(monitorTargets);
+						}catch(Exception e) {
+							return -1;
+						}
+						return 0;
+					}
+				};
+				FutureTask<Integer> future = new FutureTask<Integer>(callable);
+				String alarmId = alarm.getAlarmId();
+				futureMap.put(alarmId, future);
+				new Thread(future).start();
+			}
+
+			while(true) {
+				boolean allDone = true;
+				for(String alarmId : futureMap.keySet()) {
+					if(!futureMap.get(alarmId).isDone()) {
+						allDone = false;
+						break;
+					}
+				}
+				if(allDone) {
+					break;
+				}
+				try {
+					Thread.sleep(1000);
+				}catch(Exception e) {
+					e.printStackTrace();
+				}
 			}
 		}
 	}

@@ -47,7 +47,7 @@ public class AlarmFormat {
 	private String tmpStatFormat;
 	private String newestValue = null;
 	private Map<String, String> involveMonitorTargets = new HashMap<String, String>();
-
+	
 	public AlarmFormat(String alramId, JSONObject alarmInfo) {
 		this.alarmId = alarmId;
 		filePathCopy(alarmInfo.getString("csarFilePath"));
@@ -89,16 +89,18 @@ public class AlarmFormat {
 		return this.alarmId;
 	}
 	
-	public synchronized void copy() {
-		this.refreshMonitorTargets();
+	public synchronized void copy(JSONObject monitorTargets) {
+		this.refreshMonitorTargets(monitorTargets);
 		String tmpStatFormat = new String(this.statFormat);
 		String alarmExpression = this.refreshTempStat(tmpStatFormat);
 		this.refreshNewestValue(alarmExpression);
 		this.refreshStatus();
 	}
 	
-	private void refreshMonitorTargets() {
-		
+	private void refreshMonitorTargets(JSONObject monitorTargets) {
+		for(String monitorTarget : this.involveMonitorTargets.keySet()) {
+			this.involveMonitorTargets.put(monitorTarget, monitorTargets.getString(monitorTarget) );
+		}
 	}
 	/*
 	 * before running this function , we must run the refresh monitorTarget first
