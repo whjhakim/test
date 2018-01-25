@@ -188,7 +188,7 @@ public class ApiGateway extends HttpServlet {
 	}
 	
 	private void alarmHandler(JSONObject params) {
-		this.alarm.addAlarmInfo(params);
+		this.alarm.addAlarmInfo(params,this.vnfContains);
 	}
 
 	/*

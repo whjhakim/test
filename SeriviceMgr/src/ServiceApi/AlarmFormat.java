@@ -1,10 +1,13 @@
 package ServiceApi;
 import net.sf.json.JSONArray;
 import java.util.HashMap;
+import java.util.HashSet;
+
 import net.sf.json.JSONObject;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
 
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
@@ -46,9 +49,11 @@ public class AlarmFormat {
 	private String alarmStatus = "false"; //false or true
 	private String tmpStatFormat;
 	private String newestValue = null;
-	private Map<String, String> involveMonitorTargets = new HashMap<String, String>();
+	//monitorTargetName , <name: , vnf: >
+	private Map<String, Map<String,String>> involveMonitorTargets = new HashMap<String, Map<String,String>>();
+	private Set<String> vnfSet = new HashSet<String>();
 	
-	public AlarmFormat(String alramId, JSONObject alarmInfo) {
+	public AlarmFormat(String alramId, JSONObject alarmInfo,Map<String, List<String>> targetToVnf) {
 		this.alarmId = alarmId;
 		filePathCopy(alarmInfo.getString("csarFilePath"));
 		this.comparison = alarmInfo.getString("comparison");
@@ -60,8 +65,27 @@ public class AlarmFormat {
 		//this.description = alarmInfo.getString("description");
 		JSONArray monitorTargets = JSONArray.fromObject(alarmInfo.get("involveMetrics"));
 		for(Object obj : monitorTargets) {
-			involveMonitorTargets.put(String.valueOf(obj), "");
+			String targetName = String.valueOf(obj);
+			String vnf = this.searchVnf(targetToVnf,targetName);
+			Map<String,String> targetMap = new HashMap<String,String>();
+			targetMap.put("value", "");
+			targetMap.put("vnf", vnf);
+			this.vnfSet.add(vnf);
+			involveMonitorTargets.put(targetName, targetMap);
 		}
+	}
+	
+	public Set<String> getVnfSet(){
+		return this.vnfSet;
+	}
+	
+	private String searchVnf(Map<String, List<String>> targetToVnf,String target) {
+		for(String key : targetToVnf.keySet()) {
+			if(targetToVnf.get(key).contains(target)) {
+				return key;
+			}
+		}
+		return "";
 	}
 
 	private void filePathCopy(String filePath) {
@@ -99,7 +123,7 @@ public class AlarmFormat {
 	
 	private void refreshMonitorTargets(JSONObject monitorTargets) {
 		for(String monitorTarget : this.involveMonitorTargets.keySet()) {
-			this.involveMonitorTargets.put(monitorTarget, monitorTargets.getString(monitorTarget) );
+			this.involveMonitorTargets.get(monitorTarget).put("value", monitorTargets.getString(monitorTarget));
 		}
 	}
 	/*
@@ -109,7 +133,7 @@ public class AlarmFormat {
 	private String refreshTempStat(String tmpStatFormat) {
 		for(String key : this.involveMonitorTargets.keySet()) {
 			String newKey = "{{" + key + "}}";
-			tmpStatFormat = tmpStatFormat.replace(newKey, this.involveMonitorTargets.get(key));
+			tmpStatFormat = tmpStatFormat.replace(newKey, this.involveMonitorTargets.get(key).get("value"));
 		}
 		return tmpStatFormat;
 	}
