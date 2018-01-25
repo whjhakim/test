@@ -2,12 +2,12 @@ package ServiceApi;
 
 import ServiceApi.MonitorFormat;
 import ServiceApi.Alarm;
-import ServiceApi.AlertFormat;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.Iterator;
+import java.util.List;
 import java.io.IOException;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -18,6 +18,7 @@ import javax.servlet.http.HttpServletResponse;
 import Core.ServiceMgr;
 import ZabbixDriver.ZabbixDriver;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import Mongo.MongoApi;
@@ -39,9 +40,7 @@ public class ApiGateway extends HttpServlet {
 	//<monitorTarget,monitorTargetValue>
 	private Map<String,String> quickCache = Collections.synchronizedMap(new HashMap<String,String>());
 	
-	//<MonitorTarget,AlertFormat>
-	private Map<String,AlertFormat> requestAlertInfo = Collections.synchronizedMap(
-			new HashMap<String,AlertFormat>());
+	private Map<String, List<String>> vnfContains = new HashMap<String,List<String>>();
 
 	public static JSONObject map2JSON(Map<String,String> map) {
 		JSONObject obj = new JSONObject();
@@ -62,18 +61,15 @@ public class ApiGateway extends HttpServlet {
 		String userName = "Admin";
 		String password = "zabbix";
 		zabbixDriver = new ZabbixDriver(userName,password);
+		this.mongo = new MongoApi();
 		
 		JSONObject params = new JSONObject();
 		params.put("interval", 10000);
 		serviceMgr.handler(params, this.zabbixDriver, this.requestMonitorInfo,this.serviceMgr,
-				this.quickCache,this.requestAlertInfo);//it will run all the time
-		
-		//initate the mongo driver
-		this.mongo = new MongoApi();
+				this.quickCache,this.mongo);//it will run all the time
 
 		//initiate the alarm
-		String dbUrl = "";
-		this.alarm = new Alarm(dbUrl,this.mongo);
+		this.alarm = new Alarm(this.mongo);
 		this.alarm.start();
     }
 
@@ -118,38 +114,21 @@ public class ApiGateway extends HttpServlet {
 					response.getWriter().write("happy alert");
 					return;
 				}
-				
+
 				if(!String.valueOf(monitorObject.get("flag")).equals("monitor")) {
 					response.getWriter().write("lacking the  monitor flag");
 					return;
 				}
 
-				if(monitorObject.get("Info") == null) {
-					throw new Exception("Info is missing");
+				Iterator<Object> iterator = monitorObject.keys();
+				while(iterator.hasNext()) {
+					String key = String.valueOf(iterator.next());
+					if(key.equals("flag")){
+						continue;
+					}
+					JSONObject vnfMonitorBody = JSONObject.fromObject(monitorObject.get(key));
+					this.copy(vnfMonitorBody);
 				}
-				String[] hostGroup = infoHandler(monitorObject.get("Info"));
-				String hostGroupId = hostGroup[0];
-				String vnfNodeId = hostGroup[1];
-
-				if(monitorObject.get("MgmtNode") == null || hostGroupId == "null") {
-					throw new Exception("MgmtNode is missing");
-				}
-				String proxyId = mgmtNodeHandler(monitorObject.get("MgmtNode"));
-
-				if(monitorObject.get("VnfcNodes") == null) {
-					throw new Exception("VnfcNodesId is missing");
-				}
-				HashMap<String,String>  hostsInfo  = new HashMap<String,String>();
-				vnfcNodesHandler(monitorObject.get("VnfcNodes"),
-						hostGroupId,proxyId,hostsInfo);
-
-				if(monitorObject.get("MonitorOptions") == null) {
-					throw new Exception("MonitorOptions is missing");
-				}
-				HashMap<String,String>  monitorToItem  = new HashMap<String,String>();
-				monitorOptionsHandler(monitorObject.get("MonitorOptions")
-						, hostsInfo,monitorToItem,vnfNodeId);
-
 /*				Iterator<Object> iterator = monitorObject.keys();
 				while(iterator.hasNext()) {
 					String key = (String) iterator.next();
@@ -176,16 +155,36 @@ public class ApiGateway extends HttpServlet {
 		}
 	}
 	
-	private void alertHandler(JSONObject params) {
-		String monitorTarget = String.valueOf(JSONObject.fromObject(params.get("info"))
-				.get("monitorTargetId"));
-		if(!this.requestMonitorInfo.keySet().contains(monitorTarget)) {
-			return ;
+	private void copy(JSONObject monitorObject) {
+		try {
+			if(monitorObject.get("Info") == null) {
+				throw new Exception("Info is missing");
+			}
+			String[] hostGroup = infoHandler(monitorObject.get("Info"));
+			String hostGroupId = hostGroup[0];
+			String vnfNodeId = hostGroup[1];
+
+			if(monitorObject.get("MgmtNode") == null || hostGroupId == "null") {
+				throw new Exception("MgmtNode is missing");
+			}
+			String proxyId = mgmtNodeHandler(monitorObject.get("MgmtNode"));
+
+			if(monitorObject.get("VnfcNodes") == null) {
+				throw new Exception("VnfcNodesId is missing");
+			}
+			HashMap<String,String>  hostsInfo  = new HashMap<String,String>();
+			vnfcNodesHandler(monitorObject.get("VnfcNodes"),
+					hostGroupId,proxyId,hostsInfo);
+
+			if(monitorObject.get("MonitorOptions") == null) {
+				throw new Exception("MonitorOptions is missing");
+			}
+			HashMap<String,String>  monitorToItem  = new HashMap<String,String>();
+			monitorOptionsHandler(monitorObject.get("MonitorOptions")
+					, hostsInfo,monitorToItem,vnfNodeId);
+		}catch(Exception e) {
+			e.printStackTrace();
 		}
-		String expression = String.valueOf(params.get("expression"));
-		String url = String.valueOf(params.get("url"));
-		AlertFormat alertFormat = new AlertFormat(expression,url);
-		this.requestAlertInfo.put(monitorTarget, alertFormat);
 	}
 	
 	private void alarmHandler(JSONObject params) {
@@ -266,6 +265,7 @@ public class ApiGateway extends HttpServlet {
 			HashMap<String,String> monitorToItem,String vnfNodeId ){
 		JSONArray monitorOptionsArray = JSONArray.fromObject(monitorOptions);
 		Iterator<Object> iterator = monitorOptionsArray.iterator();
+		List<String> vnfMonitorTargetsChain = new ArrayList<String>();
 		while(iterator.hasNext()) {
 			JSONObject monitorTarget = JSONObject.fromObject(iterator.next());
 			String monitorTargetString = "null";
@@ -276,6 +276,7 @@ public class ApiGateway extends HttpServlet {
 			if(monitorTargetString == "null") {
 				break;
 			}
+			vnfMonitorTargetsChain.add(monitorTargetString);
 			JSONObject monitorTargetBody = JSONObject.fromObject(monitorTarget.get(monitorTargetString));
 			JSONArray parameters = JSONArray.fromObject(monitorTargetBody.get("parameters"));
 			Object updateTime = monitorTargetBody.get("updateTime");
@@ -319,6 +320,7 @@ public class ApiGateway extends HttpServlet {
 			format.mapItemId(monitorToItem);
 			this.requestMonitorInfo.put(format.getMonitorTarget(), format);
 		}
+		this.vnfContains.put(vnfNodeId, vnfMonitorTargetsChain);
 	}
 	
 	private JSONObject parseUrl(String url) {

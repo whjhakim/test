@@ -18,12 +18,9 @@ public class Alarm implements Runnable{
 			List<AlarmFormat>>());
 	private Map<String,JSONObject> targetMaterials = new HashMap<String,JSONObject>();
 
-	private String mongDbUrl = "";
-	private String rawTemp = "";
 	private MongoApi mongoApi;
 
-	public Alarm(String mongDBUrl, MongoApi mongo) {
-		this.mongDbUrl = mongDBUrl;
+	public Alarm(MongoApi mongo) {
 		this.mongoApi = mongo;
 	}
 
@@ -121,5 +118,19 @@ public class Alarm implements Runnable{
 			AlarmFormat alarmFormat = new AlarmFormat(alarmId,alarmEntry);
 			this.alarmInfoMap.get(vnf).add(alarmFormat);
 		}
+	}
+	
+	public static void main(String[] args) {
+		MongoApi mongo = new MongoApi();
+		Alarm alarm = new Alarm(mongo);
+		alarm.start();
+		JSONObject obj = new JSONObject();
+		alarm.addAlarmInfo(obj);
+		try {
+			Thread.sleep(1000);
+		}catch(Exception e) {
+			e.printStackTrace();
+		}
+		alarm.getAlarmsStatus("");
 	}
 }

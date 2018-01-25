@@ -8,7 +8,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import ServiceApi.AlertFormat;
+import Mongo.MongoApi;
 import ServiceApi.MonitorFormat;
 import net.sf.json.JSONObject;
 
@@ -32,7 +32,7 @@ public class ServiceMgr {
 	}
 	public void handler(JSONObject params,ZabbixDriver zabbixDriver
 			,Map<String,MonitorFormat> requestMonitorInfo,ServiceMgr serviceMgr,
-			Map<String,String> quickCache,Map<String,AlertFormat> requestAlertFormat) {
+			Map<String,String> quickCache,MongoApi mongo) {
 		this.serviceMgr.execute(new Runnable() {
 			public void run() {
 				while(true) {
@@ -40,16 +40,11 @@ public class ServiceMgr {
 					for(String monitorTarget : requestMonitorInfo.keySet()) {
 						MonitorFormat monitorFormat =  requestMonitorInfo.get(monitorTarget);
 						String result = monitorFormat.request(zabbixDriver,serviceMgr);
-						String vnfTypeId = monitorFormat.vnfNodeId;
+						String vnfNodeId = monitorFormat.vnfNodeId;
+						JSONObject uploadJSON = new JSONObject();
+						uploadJSON.put(monitorTarget, result);
 						quickCache.put(monitorTarget,result); 
-						if(requestAlertFormat.containsKey(monitorTarget)) {
-							boolean alert = requestAlertFormat.get(monitorTarget).compare(result);
-							if(alert) {
-								String reply = requestAlertFormat.get(monitorTarget).scale(vnfTypeId);
-								System.out.println(reply);
-								requestAlertFormat.remove(monitorTarget);//just right now
-							}
-						}
+						mongo.putVnfTarget(vnfNodeId,uploadJSON);
 					}
 					try {
 						Thread.sleep((int)params.get("interval"));
