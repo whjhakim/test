@@ -1,1 +1,0 @@
-#   __init__ for e2e_res_mgr_configurers module

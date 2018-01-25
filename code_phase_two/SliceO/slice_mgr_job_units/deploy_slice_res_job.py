@@ -63,6 +63,7 @@ class SliceResDeployJob(JobUnit):
             self._wait_slice_res_deploy()
             self._update_slice_ctx()
             self._deploy_monitor_options()
+            self._deploy_alarms()
             self._execution_finish()
         except Exception, e:
             print Exception, ':', e, \
@@ -203,8 +204,10 @@ class SliceResDeployJob(JobUnit):
         alarm_info = ctx_h.get_context_item()['metadata']['alarmInfo']
         alarm_serviceMgr = {
             'alarmInfo': alarm_info,
-            'flag': 'alarm'
+            'flag': 'alarm',
+            'nsTypeId': ctx_h.get_context_item()['metadata']['Info']['nsTypeId']
         }
+        print alarm_serviceMgr
         body = json.dumps(alarm_serviceMgr)
         self._send_serviceMgr(body)
 
